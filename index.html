@@ -1,0 +1,1165 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>产品抠图工具</title>
+  <style>
+    :root {
+      --primary: #4F46E5; --primary-hover: #4338CA; --primary-light: #EEF2FF;
+      --success: #059669; --danger: #DC2626;
+      --text: #1F2937; --text-sec: #6B7280;
+      --bg: #F3F4F6; --card: #FFF; --border: #E5E7EB;
+      --shadow-lg: 0 10px 15px -3px rgba(0,0,0,.1);
+      --radius: 12px;
+    }
+    *{margin:0;padding:0;box-sizing:border-box}
+    body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;background:var(--bg);color:var(--text);height:100vh;overflow:hidden}
+
+    .header{background:var(--card);border-bottom:1px solid var(--border);padding:10px 20px;display:flex;align-items:center;gap:10px;height:48px;flex-shrink:0}
+    .header-icon{width:28px;height:28px;background:var(--primary);border-radius:7px;display:flex;align-items:center;justify-content:center;color:#fff}
+    .header h1{font-size:14px;font-weight:600}
+    .header p{font-size:11px;color:var(--text-sec)}
+
+    .main{display:flex;height:calc(100vh - 48px);overflow:hidden}
+
+    /* ===== Left Toolbar ===== */
+    .left-toolbar{width:60px;background:var(--card);border-right:1px solid var(--border);display:flex;flex-direction:column;align-items:center;padding:8px 0;gap:2px;flex-shrink:0;overflow-y:auto}
+    .tb{width:48px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1px;padding:5px 2px;border:none;border-radius:8px;background:transparent;color:var(--text-sec);cursor:pointer;transition:all .15s;font-size:8px;font-weight:500;position:relative}
+    .tb:hover{background:var(--primary-light);color:var(--primary)}
+    .tb:disabled{opacity:.3;cursor:not-allowed}
+    .tb:disabled:hover{background:transparent;color:var(--text-sec)}
+    .tb.active{background:var(--primary-light);color:var(--primary);box-shadow:inset 0 0 0 1.5px var(--primary)}
+    .tb svg{width:18px;height:18px}
+    .tdiv{width:30px;height:1px;background:var(--border);margin:3px 0}
+
+    /* Format dropdown */
+    .fmt-wrap{position:relative;width:48px}
+    .fmt-menu{display:none;position:absolute;left:54px;top:0;background:var(--card);border:1px solid var(--border);border-radius:8px;box-shadow:var(--shadow-lg);z-index:100;min-width:140px;overflow:hidden}
+    .fmt-menu.show{display:block}
+    .fmt-item{display:flex;align-items:center;gap:6px;padding:8px 12px;font-size:12px;cursor:pointer;color:var(--text);border:none;background:none;width:100%;text-align:left;transition:background .1s}
+    .fmt-item:hover{background:var(--primary-light);color:var(--primary)}
+    .fmt-item.active{color:var(--primary);font-weight:600}
+    .fmt-item .ck{width:14px;visibility:hidden;flex-shrink:0}
+    .fmt-item.active .ck{visibility:visible}
+
+    /* Badge */
+    .badge{position:absolute;top:1px;right:1px;background:var(--primary);color:#fff;font-size:7px;font-weight:700;width:12px;height:12px;border-radius:50%;display:flex;align-items:center;justify-content:center}
+
+    /* ===== Canvas Area ===== */
+    .canvas-area{flex:1;display:flex;align-items:center;justify-content:center;padding:16px;position:relative;overflow:auto;background:var(--bg)}
+    .canvas-container{position:relative;display:none;box-shadow:var(--shadow-lg);border-radius:2px;overflow:visible}
+    .canvas-container.visible{display:block}
+    .checkerboard{position:absolute;top:0;left:0;width:100%;height:100%;background-image:linear-gradient(45deg,#ddd 25%,transparent 25%),linear-gradient(-45deg,#ddd 25%,transparent 25%),linear-gradient(45deg,transparent 75%,#ddd 75%),linear-gradient(-45deg,transparent 75%,#ddd 75%);background-size:16px 16px;background-position:0 0,0 8px,8px -8px,-8px 0;background-color:#fff;pointer-events:none;border-radius:2px}
+    #mainCanvas{display:block;position:relative;z-index:1}
+    #overlayCanvas{position:absolute;top:0;left:0;z-index:2;pointer-events:none}
+
+    /* Upload Zone */
+    .upload-zone{width:460px;height:320px;border:2px dashed var(--border);border-radius:var(--radius);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;cursor:pointer;transition:all .2s;background:var(--card)}
+    .upload-zone:hover,.upload-zone.dragover{border-color:var(--primary);background:var(--primary-light)}
+    .upload-zone .icon{width:52px;height:52px;background:var(--primary-light);border-radius:50%;display:flex;align-items:center;justify-content:center}
+    .upload-zone .icon svg{width:26px;height:26px;color:var(--primary)}
+    .upload-zone h3{font-size:14px;font-weight:500}
+    .upload-zone p{font-size:12px;color:var(--text-sec)}
+    .upload-zone .hint{font-size:11px;color:var(--primary);background:var(--primary-light);padding:3px 10px;border-radius:16px;margin-top:2px}
+
+    #fileInput{position:fixed;top:0;left:0;width:1px;height:1px;opacity:.01;pointer-events:none}
+
+    /* Brush cursor */
+    .bcur{position:fixed;border:2px solid rgba(79,70,229,.7);border-radius:50%;pointer-events:none;z-index:9999;display:none;transform:translate(-50%,-50%)}
+    .bcur.eraser{border-color:rgba(220,38,38,.7)}
+    .bcur.restore{border-color:rgba(5,150,105,.7)}
+
+    /* ===== Right Panel ===== */
+    .side-panel{width:260px;background:var(--card);border-left:1px solid var(--border);display:flex;flex-direction:column;overflow-y:auto;flex-shrink:0}
+    .psec{padding:12px 14px;border-bottom:1px solid var(--border)}
+    .psec:last-child{border-bottom:none}
+    .ptitle{font-size:10px;font-weight:600;color:var(--text-sec);text-transform:uppercase;letter-spacing:.4px;margin-bottom:8px}
+    .btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;padding:7px 14px;border:none;border-radius:6px;font-size:12px;font-weight:500;cursor:pointer;transition:all .15s;width:100%}
+    .btn:disabled{opacity:.5;cursor:not-allowed}
+    .btn-primary{background:var(--primary);color:#fff}
+    .btn-primary:hover:not(:disabled){background:var(--primary-hover)}
+    .btn-outline{background:transparent;color:var(--text);border:1px solid var(--border)}
+    .btn-outline:hover:not(:disabled){background:var(--bg)}
+
+    .tool-info{display:flex;align-items:center;gap:6px;padding:6px 10px;border-radius:6px;font-size:12px;font-weight:500}
+    .tool-info.sel-info{background:#FEF3C7;color:#92400E}
+    .tool-info.eraser-info{background:#FEF2F2;color:var(--danger)}
+    .tool-info.restore-info{background:#ECFDF5;color:var(--success)}
+
+    .srow{display:flex;align-items:center;gap:8px}
+    .srow input[type=range]{flex:1;accent-color:var(--primary)}
+    .srow .val{font-size:12px;color:var(--text-sec);min-width:32px;text-align:right}
+
+    .rdial{width:100px;height:100px;position:relative;cursor:pointer;user-select:none;margin:0 auto}
+    .rdial svg{width:100%;height:100%}
+    .dbg{fill:none;stroke:var(--border);stroke-width:7}
+    .dprog{fill:none;stroke:var(--primary);stroke-width:7;stroke-linecap:round}
+    .dhand{fill:var(--primary);stroke:#fff;stroke-width:2.5;cursor:grab}
+    .dtxt{font-size:18px;font-weight:600;fill:var(--text);text-anchor:middle;dominant-baseline:central}
+    .dunit{font-size:9px;fill:var(--text-sec);text-anchor:middle}
+
+    .arow{display:flex;align-items:center;gap:5px;margin-top:8px}
+    .arow input{width:56px;padding:4px 6px;border:1px solid var(--border);border-radius:5px;font-size:12px;text-align:center;outline:none}
+    .arow input:focus{border-color:var(--primary)}
+    .arow span{font-size:11px;color:var(--text-sec)}
+
+    .rpresets{display:flex;gap:3px;flex-wrap:wrap;justify-content:center;margin-top:6px}
+    .rpresets button{padding:2px 7px;border:1px solid var(--border);border-radius:4px;background:var(--card);font-size:10px;cursor:pointer;color:var(--text);transition:all .1s}
+    .rpresets button:hover{border-color:var(--primary);color:var(--primary)}
+
+    .icard{background:var(--primary-light);border-radius:6px;padding:8px;font-size:11px;color:var(--primary);line-height:1.6}
+    .zrow{display:flex;align-items:center;gap:8px}
+    .zrow input[type=range]{flex:1;accent-color:var(--primary)}
+    .zrow span{font-size:11px;color:var(--text-sec);min-width:32px;text-align:right}
+
+    .shortcut-hint{font-size:10px;color:var(--text-sec);margin-top:6px;line-height:1.5;background:var(--bg);padding:6px 8px;border-radius:5px}
+    .shortcut-hint kbd{background:var(--card);border:1px solid var(--border);border-radius:3px;padding:0 4px;font-size:10px;font-family:inherit}
+
+    /* AI 按钮高亮 */
+    .tb.ai-btn{background:linear-gradient(135deg,#4F46E5,#7C3AED);color:#fff;box-shadow:0 2px 8px rgba(79,70,229,.35)}
+    .tb.ai-btn:hover{background:linear-gradient(135deg,#4338CA,#6D28D9);color:#fff}
+    .tb.ai-btn:disabled{opacity:.4;box-shadow:none}
+    .tb.ai-btn.loading{pointer-events:none;opacity:.7}
+    .tb.ai-btn.loading::after{content:'';position:absolute;top:4px;right:4px;width:8px;height:8px;border:2px solid rgba(255,255,255,.4);border-top-color:#fff;border-radius:50%;animation:spin .7s linear infinite}
+    @keyframes spin{to{transform:rotate(360deg)}}
+
+    /* AI 面板 */
+    .ai-panel{background:linear-gradient(135deg,rgba(79,70,229,.08),rgba(124,58,237,.08));border:1px solid rgba(79,70,229,.2);border-radius:10px;padding:12px}
+    .ai-status{font-size:11px;color:var(--text-sec);margin-top:8px;line-height:1.5;display:none}
+    .ai-status.show{display:block}
+    .ai-status.error{color:var(--danger)}
+    .ai-status.success{color:var(--success)}
+    .spinner{display:inline-block;width:12px;height:12px;border:2px solid rgba(79,70,229,.2);border-top-color:var(--primary);border-radius:50%;animation:spin .7s linear infinite;vertical-align:-2px;margin-right:4px}
+  </style>
+</head>
+<body>
+
+<input type="file" id="fileInput" accept="image/jpeg,image/png,image/webp">
+
+<div class="header">
+  <div class="header-icon">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
+  </div>
+  <div>
+    <h1>产品抠图工具</h1>
+    <p>AI 一键自动抠图 + 手动微调</p>
+  </div>
+</div>
+
+<div class="main">
+
+  <!-- ===== Left Toolbar ===== -->
+  <div class="left-toolbar">
+    <button class="tb" id="tbUpload" title="上传图片">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+      <span>上传</span>
+    </button>
+    <button class="tb" id="tbScreenshot" title="截图粘贴">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
+      <span>截图</span>
+    </button>
+    <button class="tb ai-btn" id="tbAiRemove" title="AI 一键自动抠图" disabled>
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>
+      <span>AI抠图</span>
+    </button>
+
+    <div class="tdiv"></div>
+
+    <!-- Selection tools -->
+    <button class="tb" id="tbRectSel" title="矩形选区 (M)" disabled>
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="1" stroke-dasharray="4 2"/></svg>
+      <span>矩形</span>
+    </button>
+    <button class="tb" id="tbLasso" title="套索选区 (L)" disabled>
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22c5 0 9-3 9-7s-4-7-9-7-9 3-9 7 4 7 9 7z" stroke-dasharray="4 2"/><circle cx="12" cy="8" r="1.5"/></svg>
+      <span>套索</span>
+    </button>
+    <button class="tb" id="tbPoly" title="多边形选区 (P)" disabled>
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="12,2 22,8 18,20 6,20 2,8" stroke-dasharray="4 2"/></svg>
+      <span>多边形</span>
+    </button>
+    <button class="tb" id="tbDesel" title="取消选区 (Ctrl+D)" disabled>
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="1" stroke-dasharray="4 2"/><line x1="4" y1="4" x2="20" y2="20"/></svg>
+      <span>取消</span>
+    </button>
+
+    <div class="tdiv"></div>
+
+    <button class="tb active" id="tbEraser" title="橡皮擦 (E)" disabled>
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 20H7L3 16l9-9 8 8-4 4z"/></svg>
+      <span>擦除</span>
+    </button>
+    <button class="tb" id="tbRestore" title="恢复画笔 (R)" disabled>
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 19l7-7 3 3-7 7-3-3z"/><path d="M18 13l-1.5-7.5L2 2l3.5 14.5L13 18l5-5z"/></svg>
+      <span>恢复</span>
+    </button>
+    <button class="tb" id="tbUndo" title="撤销 (Ctrl+Z)" disabled>
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/></svg>
+      <span>撤销</span>
+      <span class="badge" id="undoBadge" style="display:none">0</span>
+    </button>
+
+    <div class="tdiv"></div>
+
+    <button class="tb" id="tbExport" title="导出图片" disabled>
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+      <span>导出</span>
+    </button>
+    <div class="fmt-wrap">
+      <button class="tb" id="tbFormat" title="导出格式">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="4 7 4 4 20 4 20 7"/><line x1="9" y1="20" x2="15" y2="20"/><line x1="12" y1="4" x2="12" y2="20"/></svg>
+        <span id="fmtLabel">PNG</span>
+      </button>
+      <div class="fmt-menu" id="fmtMenu">
+        <button class="fmt-item active" data-format="png" data-mime="image/png"><svg class="ck" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg>PNG（透明）</button>
+        <button class="fmt-item" data-format="jpg" data-mime="image/jpeg"><svg class="ck" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg>JPG</button>
+        <button class="fmt-item" data-format="webp" data-mime="image/webp"><svg class="ck" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg>WebP</button>
+      </div>
+    </div>
+
+    <div class="tdiv"></div>
+
+    <button class="tb" id="tbReset" title="重置" disabled>
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
+      <span>重置</span>
+    </button>
+  </div>
+
+  <!-- ===== Canvas Area ===== -->
+  <div class="canvas-area" id="canvasArea">
+    <div class="upload-zone" id="uploadZone">
+      <div class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg></div>
+      <h3>拖拽图片到这里，或点击选择</h3>
+      <p>支持 JPG / PNG / WebP</p>
+      <div class="hint">也可以 Ctrl+V 粘贴截图</div>
+    </div>
+    <div class="canvas-container" id="canvasContainer">
+      <div class="checkerboard"></div>
+      <canvas id="mainCanvas"></canvas>
+      <canvas id="overlayCanvas"></canvas>
+    </div>
+  </div>
+
+  <!-- ===== Right Panel ===== -->
+  <div class="side-panel">
+    <div class="psec" id="pAi" style="display:none">
+      <div class="ptitle">AI 一键抠图</div>
+      <div class="ai-panel">
+        <div style="font-size:12px;color:var(--text);font-weight:500;line-height:1.5;">上传产品图后，点下面按钮，AI 自动识别主体并去除背景。</div>
+        <button class="btn btn-primary" id="btnAiRemove" style="margin-top:10px">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>
+          AI 自动抠图
+        </button>
+        <div class="ai-status" id="aiStatus"></div>
+      </div>
+    </div>
+
+    <div class="psec" id="pFileInfo" style="display:none">
+      <div class="ptitle">图片信息</div>
+      <div style="font-size:11px;line-height:1.7;color:var(--text-sec)">
+        <div>文件：<span id="fileName" style="color:var(--text)">-</span></div>
+        <div>尺寸：<span id="fileSize" style="color:var(--text)">-</span></div>
+      </div>
+    </div>
+
+    <div class="psec" id="pTool" style="display:none">
+      <div class="ptitle">当前工具</div>
+      <div class="tool-info eraser-info" id="toolInfo">橡皮擦 — 涂抹擦除为透明</div>
+      <div class="shortcut-hint" id="toolShortcuts"></div>
+    </div>
+
+    <div class="psec" id="pBrush" style="display:none">
+      <div class="ptitle">画笔 / 容差</div>
+      <div class="srow">
+        <input type="range" id="brushSize" min="5" max="200" value="40">
+        <span class="val" id="brushSizeVal">40px</span>
+      </div>
+
+    </div>
+
+    <div class="psec" id="pSelInfo" style="display:none">
+      <div class="ptitle">选区操作</div>
+      <div style="display:flex;gap:4px;flex-wrap:wrap">
+        <button class="btn btn-outline" style="width:auto;padding:4px 8px;font-size:10px" id="btnSelAll">全选</button>
+        <button class="btn btn-outline" style="width:auto;padding:4px 8px;font-size:10px" id="btnSelInv">反选</button>
+        <button class="btn btn-outline" style="width:auto;padding:4px 8px;font-size:10px" id="btnSelClr">取消选区</button>
+      </div>
+      <div class="shortcut-hint">
+        <kbd>Shift</kbd> 加选 &nbsp; <kbd>Alt</kbd> 减选<br>
+        <kbd>Ctrl+A</kbd> 全选 &nbsp; <kbd>Ctrl+D</kbd> 取消<br>
+        <kbd>Ctrl+Shift+I</kbd> 反选
+      </div>
+    </div>
+
+    <div class="psec" id="pRotation" style="display:none">
+      <div class="ptitle">旋转</div>
+      <div class="rdial" id="rotationDial">
+        <svg viewBox="0 0 140 140">
+          <circle class="dbg" cx="70" cy="70" r="55"/>
+          <circle class="dprog" id="dialProg" cx="70" cy="70" r="55" stroke-dasharray="345.58" stroke-dashoffset="345.58" transform="rotate(-90 70 70)"/>
+          <circle class="dhand" id="dialHand" cx="70" cy="15" r="9"/>
+          <text class="dtxt" x="70" y="66" id="dialText">0</text>
+          <text class="dunit" x="70" y="88">度</text>
+        </svg>
+      </div>
+      <div class="arow">
+        <input type="number" id="angleInput" value="0" min="0" max="360" step="1">
+        <span>度</span>
+        <button class="btn btn-outline" style="width:auto;padding:3px 8px;font-size:10px" id="resetAngleBtn">重置</button>
+      </div>
+      <div class="rpresets" id="rotPresets">
+        <button data-angle="0">0</button><button data-angle="45">45</button><button data-angle="90">90</button><button data-angle="180">180</button><button data-angle="270">270</button>
+      </div>
+    </div>
+
+    <div class="psec" id="pZoom" style="display:none">
+      <div class="ptitle">缩放</div>
+      <div class="zrow">
+        <input type="range" id="zoomRange" min="25" max="400" value="100">
+        <span id="zoomLabel">100%</span>
+      </div>
+    </div>
+
+    <div class="psec" id="pTips">
+      <div class="ptitle">使用说明</div>
+      <div class="icard">
+        1. 上传产品图片<br>
+        2. 点"AI 自动抠图"一键去除背景<br>
+        3. 如有残留，用擦除/恢复笔刷微调<br>
+        4. 调整旋转后导出 PNG
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="bcur" id="bcur"></div>
+
+<script>
+// ===================== STATE =====================
+let originalImage = null;
+let currentTool = 'eraser'; // eraser | restore | rect-sel | lasso | poly
+let brushRadius = 20;
+let currentAngle = 0;
+let currentZoom = 100;
+let isDrawing = false;
+let lastX = -1, lastY = -1;
+let undoStack = [];
+const MAX_UNDO = 30;
+let selFormat = 'png', selMime = 'image/png';
+
+// Selection state
+let selMask = null;  // Uint8Array, 1=selected, 0=not, size = w*h
+let selMode = 'new'; // new | add | sub — determined by Shift/Alt keys
+let selAnimFrame = null;
+
+// For rectangle selection
+let rectStart = null, rectEnd = null;
+// For lasso
+let lassoPoints = [];
+// For polygon selection
+let polyPoints = [];      // [{x,y},...] clicked points forming polygon
+let polyPreview = null;   // {x,y} current mouse position for preview line
+let polyClosed = false;   // whether polygon is closed
+// Dragging existing selection
+let selDragging = false, selDragStart = null;
+// Resizing selection (corner handles)
+let selResizing = false, selResizeHandle = null, selResizeStart = null;
+
+let _origDataCache = null;
+
+// ===================== DOM =====================
+const $ = id => document.getElementById(id);
+const uploadZone = $('uploadZone'), fileInput = $('fileInput');
+const canvasContainer = $('canvasContainer');
+const mainCanvas = $('mainCanvas'), overlayCanvas = $('overlayCanvas');
+const ctx = mainCanvas.getContext('2d', {willReadFrequently:true});
+const octx = overlayCanvas.getContext('2d');
+const canvasArea = $('canvasArea'), bcur = $('bcur');
+
+const pFileInfo=$('pFileInfo'),pTool=$('pTool'),pBrush=$('pBrush'),pSelInfo=$('pSelInfo'),pRotation=$('pRotation'),pZoom=$('pZoom'),pTips=$('pTips');
+
+const tbUpload=$('tbUpload'),tbScreenshot=$('tbScreenshot');
+const tbAiRemove=$('tbAiRemove'),btnAiRemove=$('btnAiRemove'),aiStatus=$('aiStatus'),pAi=$('pAi');
+const tbRectSel=$('tbRectSel'),tbLasso=$('tbLasso'),tbPoly=$('tbPoly'),tbDesel=$('tbDesel');
+const tbEraser=$('tbEraser'),tbRestore=$('tbRestore'),tbUndo=$('tbUndo');
+const tbExport=$('tbExport'),tbFormat=$('tbFormat'),tbReset=$('tbReset');
+const fmtMenu=$('fmtMenu'),undoBadge=$('undoBadge');
+
+const brushSizeSlider=$('brushSize'),brushSizeVal=$('brushSizeVal');
+const angleInput=$('angleInput'),zoomRange=$('zoomRange');
+const rotationDial=$('rotationDial'),rotPresets=$('rotPresets'),resetAngleBtn=$('resetAngleBtn');
+const toolInfo=$('toolInfo'),toolShortcuts=$('toolShortcuts');
+
+console.log('[抠图] loaded');
+
+// ===================== FILE UPLOAD =====================
+uploadZone.addEventListener('click', e => { e.preventDefault(); e.stopPropagation(); fileInput.value=''; fileInput.click(); });
+tbUpload.addEventListener('click', () => { fileInput.value=''; fileInput.click(); });
+uploadZone.addEventListener('dragover', e => { e.preventDefault(); uploadZone.classList.add('dragover'); });
+uploadZone.addEventListener('dragleave', () => uploadZone.classList.remove('dragover'));
+uploadZone.addEventListener('drop', e => { e.preventDefault(); uploadZone.classList.remove('dragover'); const f=e.dataTransfer.files[0]; if(f&&f.type.startsWith('image/'))handleFile(f); });
+canvasArea.addEventListener('dragover', e => e.preventDefault());
+canvasArea.addEventListener('drop', e => { e.preventDefault(); const f=e.dataTransfer.files[0]; if(f&&f.type.startsWith('image/'))handleFile(f); });
+fileInput.addEventListener('change', e => { const f=e.target.files&&e.target.files[0]; if(f)handleFile(f); });
+
+tbScreenshot.addEventListener('click', async()=>{try{const items=await navigator.clipboard.read();for(const item of items){const t=item.types.find(x=>x.startsWith('image/'));if(t){const b=await item.getType(t);handleFile(new File([b],'clipboard.png',{type:t}));return;}}alert('剪贴板中没有图片');}catch(e){alert('无法读取剪贴板，请用 Ctrl+V 粘贴');}});
+document.addEventListener('paste', e=>{const items=e.clipboardData&&e.clipboardData.items;if(!items)return;for(let i=0;i<items.length;i++){if(items[i].type.startsWith('image/')){const f=items[i].getAsFile();if(f)handleFile(f);return;}}});
+
+function handleFile(file) {
+  if(file.size>15*1024*1024){alert('图片不能超过 15MB');return;}
+  const reader=new FileReader();
+  reader.onload=e=>{
+    const img=new Image();
+    img.onload=()=>{
+      originalImage=img; currentAngle=0; currentZoom=100; undoStack=[];
+      _origDataCache=null;
+      $('fileName').textContent=file.name||'粘贴的图片';
+      $('fileSize').textContent=img.naturalWidth+' x '+img.naturalHeight;
+
+      uploadZone.style.display='none';
+      canvasContainer.classList.add('visible');
+      pFileInfo.style.display=''; pTool.style.display=''; pBrush.style.display='';
+      pRotation.style.display=''; pZoom.style.display=''; pTips.style.display='none';
+      pAi.style.display='';
+
+      [tbRectSel,tbLasso,tbPoly,tbDesel,tbEraser,tbRestore,tbExport,tbReset].forEach(b=>b.disabled=false);
+      tbAiRemove.disabled=false;
+      tbUndo.disabled=true;
+      updateUndoBadge();
+
+      mainCanvas.width=img.naturalWidth; mainCanvas.height=img.naturalHeight;
+      overlayCanvas.width=img.naturalWidth; overlayCanvas.height=img.naturalHeight;
+      overlayCanvas.style.width=mainCanvas.style.width;
+      overlayCanvas.style.height=mainCanvas.style.height;
+      ctx.clearRect(0,0,mainCanvas.width,mainCanvas.height);
+      ctx.drawImage(img,0,0);
+
+      clearSelection();
+      fitCanvas(); updateDial(0); angleInput.value=0;
+      zoomRange.value=100; $('zoomLabel').textContent='100%';
+      setTool('eraser');
+      console.log('[抠图] 图片已加载:',img.naturalWidth,'x',img.naturalHeight);
+    };
+    img.onerror=()=>alert('图片加载失败');
+    img.src=e.target.result;
+  };
+  reader.readAsDataURL(file);
+}
+
+function fitCanvas(){
+  const r=canvasArea.getBoundingClientRect();
+  const s=Math.min((r.width-32)/mainCanvas.width,(r.height-32)/mainCanvas.height,1);
+  currentZoom=Math.round(s*100);
+  zoomRange.value=currentZoom; $('zoomLabel').textContent=currentZoom+'%'; applyZoom();
+}
+
+function applyZoom(){
+  const s=currentZoom/100;
+  mainCanvas.style.width=(mainCanvas.width*s)+'px'; mainCanvas.style.height=(mainCanvas.height*s)+'px';
+  overlayCanvas.style.width=mainCanvas.style.width; overlayCanvas.style.height=mainCanvas.style.height;
+}
+
+// ===================== TOOL SELECTION =====================
+const toolButtons = {eraser:tbEraser, restore:tbRestore, 'rect-sel':tbRectSel, lasso:tbLasso, poly:tbPoly};
+const toolLabels = {
+  'eraser':{cls:'eraser-info', text:'橡皮擦 — 涂抹擦除为透明'},
+  'restore':{cls:'restore-info', text:'恢复画笔 — 画回被擦除的区域'},
+  'rect-sel':{cls:'sel-info', text:'矩形选区 — 拖拽框选区域'},
+  'lasso':{cls:'sel-info', text:'套索选区 — 自由绘制选区边界'},
+  'poly':{cls:'sel-info', text:'多边形选区 — 点击多点连线，双击闭合'}
+};
+const toolHints = {
+  'eraser':'<kbd>E</kbd> 切换 &nbsp; <kbd>[</kbd><kbd>]</kbd> 调大小',
+  'restore':'<kbd>R</kbd> 切换 &nbsp; <kbd>[</kbd><kbd>]</kbd> 调大小',
+  'rect-sel':'<kbd>M</kbd> 切换 &nbsp; <kbd>Shift</kbd> 加选 &nbsp; <kbd>Alt</kbd> 减选',
+  'lasso':'<kbd>L</kbd> 切换 &nbsp; <kbd>Shift</kbd> 加选 &nbsp; <kbd>Alt</kbd> 减选',
+  'poly':'<kbd>P</kbd> 切换 &nbsp; 单击加点 &nbsp; 双击/回车闭合 &nbsp; <kbd>Esc</kbd> 取消'
+};
+
+function setTool(t){
+  currentTool=t;
+  // Cancel in-progress polygon when switching tools
+  if(t!=='poly'&&polyPoints.length>0){polyPoints=[];polyPreview=null;polyClosed=false;renderPolyPreview();}
+  Object.values(toolButtons).forEach(b=>b.classList.remove('active'));
+  if(toolButtons[t])toolButtons[t].classList.add('active');
+  const lbl=toolLabels[t]||toolLabels.eraser;
+  toolInfo.className='tool-info '+lbl.cls;
+  toolInfo.textContent=lbl.text;
+  toolShortcuts.innerHTML=toolHints[t]||'';
+
+  // Canvas cursor
+  if(t==='eraser'||t==='restore'){mainCanvas.style.cursor='none';bcur.style.display='none';}
+  else if(t==='rect-sel'||t==='lasso'||t==='poly'){mainCanvas.style.cursor='crosshair';bcur.style.display='none';}
+  else{mainCanvas.style.cursor='default';bcur.style.display='none';}
+
+  // Show selection info panel when selection tool active
+  pSelInfo.style.display=(t==='rect-sel'||t==='lasso'||t==='poly')?'':'none';
+}
+
+Object.entries(toolButtons).forEach(([k,b])=>b.addEventListener('click',()=>setTool(k)));
+
+// ===================== SELECTION MASK =====================
+function initSelMask(){selMask=new Uint8Array(mainCanvas.width*mainCanvas.height);}
+function clearSelection(){
+  selMask=null; rectStart=null; rectEnd=null; lassoPoints=[];
+  polyPoints=[]; polyPreview=null; polyClosed=false;
+  selType='none'; selRect=null; selLassoPts=[];
+  pSelInfo.style.display='none';
+  renderOverlay();
+}
+function hasSelection(){return selMask&&selMask.some(v=>v);}
+
+function setPixelSel(x,y,val){
+  if(!selMask)return;
+  const w=mainCanvas.width;
+  if(x>=0&&x<w&&y>=0&&y<mainCanvas.height) selMask[y*w+x]=val;
+}
+
+// Selection visual data — stores geometry for rendering
+let selType = 'none'; // 'rect' | 'lasso' | 'poly' | 'none'
+let selRect = null;   // {x,y,w,h} for rect selection
+let selLassoPts = []; // [{x,y},...] for lasso selection path
+// selMask is still used for pixel-level operations (eraser constraint, etc.)
+
+// Render selection overlay — ONLY draw dashed border line, nothing else
+function renderOverlay(){
+  octx.clearRect(0,0,overlayCanvas.width,overlayCanvas.height);
+  if(!selMask||!selMask.some(v=>v))return;
+
+  octx.save();
+  octx.setLineDash([8,6]);
+  octx.lineWidth=1.5;
+
+  if(selType==='rect'&&selRect){
+    // Rectangle: just stroke a rectangle — clean, fast, no per-pixel scan
+    octx.strokeStyle='rgba(255,255,255,0.9)';
+    octx.strokeRect(selRect.x, selRect.y, selRect.w, selRect.h);
+    octx.strokeStyle='rgba(0,0,0,0.7)';
+    octx.lineDashOffset=8;
+    octx.strokeRect(selRect.x, selRect.y, selRect.w, selRect.h);
+
+  } else if(selType==='lasso'&&selLassoPts.length>=3){
+    // Lasso or polygon: stroke the closed polygon path
+    octx.strokeStyle='rgba(255,255,255,0.9)';
+    octx.beginPath();
+    octx.moveTo(selLassoPts[0].x, selLassoPts[0].y);
+    for(let i=1;i<selLassoPts.length;i++) octx.lineTo(selLassoPts[i].x, selLassoPts[i].y);
+    octx.closePath();
+    octx.stroke();
+    octx.strokeStyle='rgba(0,0,0,0.7)';
+    octx.lineDashOffset=8;
+    octx.beginPath();
+    octx.moveTo(selLassoPts[0].x, selLassoPts[0].y);
+    for(let i=1;i<selLassoPts.length;i++) octx.lineTo(selLassoPts[i].x, selLassoPts[i].y);
+    octx.closePath();
+    octx.stroke();
+
+  } else if(selType==='poly'&&selLassoPts.length>=3){
+    // Polygon selection: same rendering as lasso
+    octx.strokeStyle='rgba(255,255,255,0.9)';
+    octx.beginPath();
+    octx.moveTo(selLassoPts[0].x, selLassoPts[0].y);
+    for(let i=1;i<selLassoPts.length;i++) octx.lineTo(selLassoPts[i].x, selLassoPts[i].y);
+    octx.closePath();
+    octx.stroke();
+    octx.strokeStyle='rgba(0,0,0,0.7)';
+    octx.lineDashOffset=8;
+    octx.beginPath();
+    octx.moveTo(selLassoPts[0].x, selLassoPts[0].y);
+    for(let i=1;i<selLassoPts.length;i++) octx.lineTo(selLassoPts[i].x, selLassoPts[i].y);
+    octx.closePath();
+    octx.stroke();
+  }
+
+  octx.setLineDash([]);
+  octx.restore();
+}
+
+// No animation — static dashed border like PS
+function startSelAnim(){renderOverlay();}
+function stopSelAnim(){if(selAnimFrame){cancelAnimationFrame(selAnimFrame);selAnimFrame=null;}}
+
+// ===================== SELECTION TOOLS LOGIC =====================
+
+// Get canvas coords from event
+function getCoords(e){
+  const r=mainCanvas.getBoundingClientRect();
+  const sx=mainCanvas.width/r.width, sy=mainCanvas.height/r.height;
+  const cx=e.clientX??(e.touches&&e.touches[0]?.clientX);
+  const cy=e.clientY??(e.touches&&e.touches[0]?.clientY);
+  if(cx==null||cy==null)return null;
+  return{x:Math.floor((cx-r.left)*sx), y:Math.floor((cy-r.top)*sy)};
+}
+
+// Detect modifier keys for sel mode
+function getSelMode(e){
+  if(e.altKey)return'sub';
+  if(e.shiftKey)return'add';
+  return'new';
+}
+
+// ---- Rectangle Selection ----
+function applyRectSel(x0,y0,x1,y1,mode){
+  if(!selMask||mode==='new')initSelMask();
+  const w=mainCanvas.width,h=mainCanvas.height;
+  const minX=Math.max(0,Math.min(x0,x1)), maxX=Math.min(w-1,Math.max(x0,x1));
+  const minY=Math.max(0,Math.min(y0,y1)), maxY=Math.min(h-1,Math.max(y0,y1));
+  if(mode==='sub'){
+    for(let y=minY;y<=maxY;y++) for(let x=minX;x<=maxX;x++) selMask[y*w+x]=0;
+  } else {
+    for(let y=minY;y<=maxY;y++) for(let x=minX;x<=maxX;x++) selMask[y*w+x]=1;
+  }
+  selType='rect';
+  selRect={x:minX,y:minY,w:maxX-minX+1,h:maxY-minY+1};
+  startSelAnim();
+  pSelInfo.style.display='';
+}
+
+// ---- Lasso Selection ----
+function applyLassoSel(points,mode){
+  if(!selMask||mode==='new')initSelMask();
+  const w=mainCanvas.width,h=mainCanvas.height;
+  // Rasterize polygon using scanline
+  if(points.length<3){startSelAnim();pSelInfo.style.display='';return;}
+  let minY=Infinity,maxY=-Infinity;
+  for(const p of points){if(p.y<minY)minY=p.y;if(p.y>maxY)maxY=p.y;}
+  minY=Math.max(0,Math.floor(minY));maxY=Math.min(h-1,Math.ceil(maxY));
+
+  for(let y=minY;y<=maxY;y++){
+    const ints=[];
+    for(let i=0;i<points.length;i++){
+      const j=(i+1)%points.length;
+      const y0=points[i].y,y1=points[j].y;
+      if((y0<=y&&y1>y)||(y1<=y&&y0>y)){
+        const t=(y-y0)/(y1-y0);
+        ints.push(Math.round(points[i].x+t*(points[j].x-points[i].x)));
+      }
+    }
+    ints.sort((a,b)=>a-b);
+    for(let k=0;k<ints.length-1;k+=2){
+      const x0=Math.max(0,ints[k]),x1=Math.min(w-1,ints[k+1]);
+      for(let x=x0;x<=x1;x++){
+        if(mode==='sub')selMask[y*w+x]=0; else selMask[y*w+x]=1;
+      }
+    }
+  }
+  selType='lasso';
+  selLassoPts=points.slice();
+  startSelAnim();pSelInfo.style.display='';
+}
+
+// ---- Polygon Selection ----
+// Click to add points, double-click or Enter to close the polygon
+function applyPolySel(points,mode){
+  if(!selMask||mode==='new')initSelMask();
+  const w=mainCanvas.width,h=mainCanvas.height;
+  if(points.length<3){startSelAnim();pSelInfo.style.display='';return;}
+  // Reuse scanline rasterization from lasso
+  let minY=Infinity,maxY=-Infinity;
+  for(const p of points){if(p.y<minY)minY=p.y;if(p.y>maxY)maxY=p.y;}
+  minY=Math.max(0,Math.floor(minY));maxY=Math.min(h-1,Math.ceil(maxY));
+
+  for(let y=minY;y<=maxY;y++){
+    const ints=[];
+    for(let i=0;i<points.length;i++){
+      const j=(i+1)%points.length;
+      const y0=points[i].y,y1=points[j].y;
+      if((y0<=y&&y1>y)||(y1<=y&&y0>y)){
+        const t=(y-y0)/(y1-y0);
+        ints.push(Math.round(points[i].x+t*(points[j].x-points[i].x)));
+      }
+    }
+    ints.sort((a,b)=>a-b);
+    for(let k=0;k<ints.length-1;k+=2){
+      const x0=Math.max(0,ints[k]),x1=Math.min(w-1,ints[k+1]);
+      for(let x=x0;x<=x1;x++){
+        if(mode==='sub')selMask[y*w+x]=0; else selMask[y*w+x]=1;
+      }
+    }
+  }
+  selType='poly';
+  selLassoPts=points.slice();
+  startSelAnim();pSelInfo.style.display='';
+}
+
+// Render polygon preview (during construction, before closing)
+function renderPolyPreview(){
+  octx.clearRect(0,0,overlayCanvas.width,overlayCanvas.height);
+  if(polyPoints.length===0)return;
+
+  octx.save();
+  octx.setLineDash([8,6]);
+  octx.lineWidth=1.5;
+
+  // Draw existing segments (solid white+black dashed)
+  octx.strokeStyle='rgba(255,255,255,0.9)';
+  octx.beginPath();
+  octx.moveTo(polyPoints[0].x, polyPoints[0].y);
+  for(let i=1;i<polyPoints.length;i++) octx.lineTo(polyPoints[i].x, polyPoints[i].y);
+  // Preview line to current mouse
+  if(polyPreview) octx.lineTo(polyPreview.x, polyPreview.y);
+  octx.stroke();
+
+  octx.strokeStyle='rgba(0,0,0,0.7)';
+  octx.lineDashOffset=8;
+  octx.beginPath();
+  octx.moveTo(polyPoints[0].x, polyPoints[0].y);
+  for(let i=1;i<polyPoints.length;i++) octx.lineTo(polyPoints[i].x, polyPoints[i].y);
+  if(polyPreview) octx.lineTo(polyPreview.x, polyPreview.y);
+  octx.stroke();
+
+  // Draw vertex dots
+  octx.setLineDash([]);
+  for(const p of polyPoints){
+    octx.fillStyle='rgba(255,255,255,0.9)';
+    octx.beginPath();octx.arc(p.x,p.y,3,0,Math.PI*2);octx.fill();
+    octx.strokeStyle='rgba(0,0,0,0.7)';octx.lineWidth=1;
+    octx.beginPath();octx.arc(p.x,p.y,3,0,Math.PI*2);octx.stroke();
+  }
+
+  // If near first point, highlight it to indicate closing
+  if(polyPreview&&polyPoints.length>=3){
+    const d=Math.hypot(polyPreview.x-polyPoints[0].x, polyPreview.y-polyPoints[0].y);
+    if(d<15){
+      octx.fillStyle='rgba(79,70,229,0.5)';
+      octx.beginPath();octx.arc(polyPoints[0].x,polyPoints[0].y,8,0,Math.PI*2);octx.fill();
+    }
+  }
+
+  octx.setLineDash([]);
+  octx.restore();
+}
+
+// ---- Move Selection ----
+function moveSelection(dx,dy){
+  if(!selMask)return;
+  const w=mainCanvas.width,h=mainCanvas.height;
+  const nm=new Uint8Array(w*h);
+  for(let y=0;y<h;y++){
+    for(let x=0;x<w;x++){
+      if(!selMask[y*w+x])continue;
+      const nx=x+dx,ny=y+dy;
+      if(nx>=0&&nx<w&&ny>=0&&ny<h)nm[ny*w+nx]=1;
+    }
+  }
+  selMask=nm;
+  renderOverlay();
+}
+
+// ---- Selection operations ----
+$('btnSelAll').addEventListener('click',()=>{
+  initSelMask();selMask.fill(1);
+  selType='rect';
+  selRect={x:0,y:0,w:mainCanvas.width,h:mainCanvas.height};
+  selLassoPts=[];
+  startSelAnim();pSelInfo.style.display='';
+});
+$('btnSelInv').addEventListener('click',()=>{
+  if(!selMask)return;
+  for(let i=0;i<selMask.length;i++)selMask[i]=selMask[i]?0:1;
+  renderOverlay();
+});
+$('btnSelClr').addEventListener('click',()=>{clearSelection();stopSelAnim();});
+tbDesel.addEventListener('click',()=>{clearSelection();stopSelAnim();});
+
+// ===================== CANVAS MOUSE HANDLING =====================
+function onCanvasDown(e){
+  if(!originalImage)return;
+  e.preventDefault();
+  const c=getCoords(e);if(!c)return;
+
+  if(currentTool==='rect-sel'){
+    const mode=getSelMode(e);
+    selMode=mode;
+    isDrawing=true; rectStart=c; rectEnd=c;
+  } else if(currentTool==='lasso'){
+    const mode=getSelMode(e);
+    selMode=mode;
+    isDrawing=true; lassoPoints=[c];
+  } else if(currentTool==='poly'){
+    // Polygon: click to add points, double-click to close
+    if(polyClosed)return;
+    const mode=getSelMode(e);
+    // Check if clicking near the first point to close (if >= 3 points)
+    if(polyPoints.length>=3){
+      const d=Math.hypot(c.x-polyPoints[0].x, c.y-polyPoints[0].y);
+      if(d<15){
+        // Close the polygon
+        closePolySel(mode);
+        return;
+      }
+    }
+    polyPoints.push(c);
+    selMode=mode;
+    renderPolyPreview();
+  } else if(currentTool==='eraser'||currentTool==='restore'){
+    // If there's a selection, check if click is inside
+    if(hasSelection()&&selMask[c.y*mainCanvas.width+c.x]===0)return;
+    isDrawing=true; saveUndoState();
+    lastX=c.x; lastY=c.y;
+    drawBrushStroke(c.x,c.y,c.x,c.y);
+  }
+}
+
+function closePolySel(mode){
+  if(polyPoints.length<3)return;
+  applyPolySel(polyPoints,mode);
+  polyPoints=[];polyPreview=null;polyClosed=false;
+}
+
+function onCanvasMove(e){
+  if(!originalImage)return;
+  const c=getCoords(e);
+
+  // Update brush cursor for eraser/restore
+  if(currentTool==='eraser'||currentTool==='restore'){
+    const sz=brushRadius*2*(currentZoom/100);
+    bcur.style.width=sz+'px';bcur.style.height=sz+'px';
+    bcur.style.left=e.clientX+'px';bcur.style.top=e.clientY+'px';
+    bcur.style.display='block';
+    bcur.className='bcur '+currentTool;
+  }
+
+  if(!isDrawing&&currentTool==='poly'&&polyPoints.length>0&&!polyClosed){
+    // Update polygon preview line to mouse position
+    if(c){polyPreview=c; renderPolyPreview();}
+  }
+
+  if(!isDrawing||!c)return;
+
+  if(currentTool==='rect-sel'){
+    rectEnd=c;
+    // Live preview: just show the rectangle being drawn
+    octx.clearRect(0,0,overlayCanvas.width,overlayCanvas.height);
+    octx.save();
+    octx.setLineDash([8,6]);
+    octx.strokeStyle='rgba(255,255,255,0.9)';octx.lineWidth=1.5;
+    const rx=Math.min(rectStart.x,rectEnd.x),ry=Math.min(rectStart.y,rectEnd.y);
+    const rw=Math.abs(rectEnd.x-rectStart.x),rh=Math.abs(rectEnd.y-rectStart.y);
+    octx.strokeRect(rx,ry,rw,rh);
+    octx.strokeStyle='rgba(0,0,0,0.7)';octx.lineDashOffset=8;
+    octx.strokeRect(rx,ry,rw,rh);
+    octx.setLineDash([]);octx.restore();
+  } else if(currentTool==='lasso'){
+    lassoPoints.push(c);
+    // Live preview lasso path
+    octx.clearRect(0,0,overlayCanvas.width,overlayCanvas.height);
+    octx.save();octx.setLineDash([8,6]);
+    octx.strokeStyle='rgba(255,255,255,0.9)';octx.lineWidth=1.5;octx.beginPath();
+    octx.moveTo(lassoPoints[0].x,lassoPoints[0].y);
+    for(let i=1;i<lassoPoints.length;i++)octx.lineTo(lassoPoints[i].x,lassoPoints[i].y);
+    octx.stroke();
+    octx.strokeStyle='rgba(0,0,0,0.7)';octx.lineDashOffset=8;octx.stroke();
+    octx.setLineDash([]);octx.restore();
+  } else if(currentTool==='eraser'||currentTool==='restore'){
+    if(hasSelection()&&selMask[c.y*mainCanvas.width+c.x]===0)return;
+    drawBrushStroke(lastX,lastY,c.x,c.y);
+    lastX=c.x;lastY=c.y;
+  }
+}
+
+function onCanvasUp(e){
+  if(!isDrawing)return;
+  isDrawing=false;
+
+  if(currentTool==='rect-sel'&&rectStart&&rectEnd){
+    applyRectSel(rectStart.x,rectStart.y,rectEnd.x,rectEnd.y,selMode);
+    rectStart=null;rectEnd=null;
+  } else if(currentTool==='lasso'&&lassoPoints.length>=3){
+    applyLassoSel(lassoPoints,selMode);
+    lassoPoints=[];
+  }
+  lastX=-1;lastY=-1;
+}
+
+// Double-click to close polygon selection
+mainCanvas.addEventListener('dblclick',e=>{
+  if(currentTool==='poly'&&polyPoints.length>=3&&!polyClosed){
+    // Remove the duplicate point added by the second click of dblclick
+    // (the first click already added a point via onCanvasDown)
+    if(polyPoints.length>3){
+      const last=polyPoints[polyPoints.length-1];
+      const prev=polyPoints[polyPoints.length-2];
+      if(Math.hypot(last.x-prev.x,last.y-prev.y)<5){
+        polyPoints.pop();
+      }
+    }
+    closePolySel(selMode);
+  }
+});
+
+mainCanvas.addEventListener('mousedown',onCanvasDown);
+document.addEventListener('mousemove',onCanvasMove);
+document.addEventListener('mouseup',onCanvasUp);
+mainCanvas.addEventListener('touchstart',e=>{e.preventDefault();onCanvasDown(e);},{passive:false});
+document.addEventListener('touchmove',e=>onCanvasMove(e));
+document.addEventListener('touchend',e=>onCanvasUp(e));
+
+mainCanvas.addEventListener('mouseleave',()=>{bcur.style.display='none';});
+
+// ===================== BRUSH DRAWING (with selection mask) =====================
+function saveUndoState(){
+  undoStack.push(ctx.getImageData(0,0,mainCanvas.width,mainCanvas.height));
+  if(undoStack.length>MAX_UNDO)undoStack.shift();
+  tbUndo.disabled=false; updateUndoBadge();
+}
+
+function updateUndoBadge(){
+  if(undoStack.length>0){undoBadge.style.display='flex';undoBadge.textContent=undoStack.length;}
+  else{undoBadge.style.display='none';tbUndo.disabled=true;}
+}
+
+function drawBrushStroke(x0,y0,x1,y1){
+  if(currentTool==='eraser'){
+    // Erase with selection mask constraint
+    ctx.save();
+    ctx.globalCompositeOperation='destination-out';
+    ctx.strokeStyle='rgba(0,0,0,1)';
+    ctx.lineWidth=brushRadius*2;
+    ctx.lineCap='round';ctx.lineJoin='round';
+    ctx.beginPath();ctx.moveTo(x0,y0);ctx.lineTo(x1,y1);ctx.stroke();
+    ctx.restore();
+
+    // If selection exists, restore pixels outside the selection
+    if(hasSelection()){
+      const w=mainCanvas.width,h=mainCanvas.height;
+      const cur=ctx.getImageData(0,0,w,h);
+      const prev=undoStack[undoStack.length-1];
+      for(let i=0;i<selMask.length;i++){
+        if(!selMask[i]){
+          // Outside selection: restore from previous state
+          cur.data[i*4]=prev.data[i*4];
+          cur.data[i*4+1]=prev.data[i*4+1];
+          cur.data[i*4+2]=prev.data[i*4+2];
+          cur.data[i*4+3]=prev.data[i*4+3];
+        }
+      }
+      ctx.putImageData(cur,0,0);
+    }
+  } else if(currentTool==='restore'){
+    drawRestoreStroke(x0,y0,x1,y1);
+  }
+}
+
+function drawRestoreStroke(x0,y0,x1,y1){
+  const tc=document.createElement('canvas');
+  tc.width=mainCanvas.width;tc.height=mainCanvas.height;
+  const tctx=tc.getContext('2d');
+  tctx.lineWidth=brushRadius*2;tctx.lineCap='round';tctx.lineJoin='round';
+  tctx.strokeStyle='white';tctx.beginPath();tctx.moveTo(x0,y0);tctx.lineTo(x1,y1);tctx.stroke();
+
+  const strokeD=tctx.getImageData(0,0,tc.width,tc.height);
+  const mainD=ctx.getImageData(0,0,mainCanvas.width,mainCanvas.height);
+  const origD=getOrigImgData();
+  const hasSel=hasSelection();
+
+  for(let i=0;i<strokeD.data.length;i+=4){
+    const pi=i/4;
+    if(strokeD.data[i+3]>0&&(!hasSel||selMask[pi])){
+      mainD.data[i]=origD.data[i];mainD.data[i+1]=origD.data[i+1];
+      mainD.data[i+2]=origD.data[i+2];mainD.data[i+3]=origD.data[i+3];
+    }
+  }
+  ctx.putImageData(mainD,0,0);
+}
+
+function getOrigImgData(){
+  if(!_origDataCache&&originalImage){
+    const tc=document.createElement('canvas');tc.width=originalImage.naturalWidth;tc.height=originalImage.naturalHeight;
+    tc.getContext('2d').drawImage(originalImage,0,0);
+    _origDataCache=tc.getContext('2d').getImageData(0,0,tc.width,tc.height);
+  }
+  return _origDataCache;
+}
+
+// ===================== UNDO =====================
+tbUndo.addEventListener('click',()=>{if(!undoStack.length)return;ctx.putImageData(undoStack.pop(),0,0);updateUndoBadge();});
+
+// ===================== BRUSH SIZE / TOLERANCE =====================
+brushSizeSlider.addEventListener('input',()=>{brushRadius=parseInt(brushSizeSlider.value)/2;brushSizeVal.textContent=brushSizeSlider.value+'px';});
+
+// ===================== FORMAT =====================
+tbFormat.addEventListener('click',e=>{e.stopPropagation();fmtMenu.classList.toggle('show');});
+document.addEventListener('click',e=>{if(!fmtMenu.contains(e.target)&&!tbFormat.contains(e.target))fmtMenu.classList.remove('show');});
+fmtMenu.addEventListener('click',e=>{const item=e.target.closest('.fmt-item');if(!item)return;selFormat=item.dataset.format;selMime=item.dataset.mime;$('fmtLabel').textContent=selFormat.toUpperCase();document.querySelectorAll('.fmt-item').forEach(i=>i.classList.remove('active'));item.classList.add('active');fmtMenu.classList.remove('show');});
+
+// ===================== EXPORT =====================
+tbExport.addEventListener('click',exportImage);
+function exportImage(){
+  if(!originalImage)return;
+  stopSelAnim();
+  const rad=currentAngle*Math.PI/180;
+  const sin=Math.abs(Math.sin(rad)),cos=Math.abs(Math.cos(rad));
+  const w=mainCanvas.width,h=mainCanvas.height;
+  const rW=Math.ceil(w*cos+h*sin),rH=Math.ceil(w*sin+h*cos);
+  const tc=document.createElement('canvas');tc.width=rW;tc.height=rH;
+  const tctx=tc.getContext('2d');
+  if(selMime==='image/jpeg'){tctx.fillStyle='#FFF';tctx.fillRect(0,0,rW,rH);}
+  tctx.save();tctx.translate(rW/2,rH/2);tctx.rotate(rad);tctx.drawImage(mainCanvas,-w/2,-h/2);tctx.restore();
+  const q=(selFormat==='jpg'||selFormat==='webp')?.92:undefined;
+  tc.toBlob(blob=>{if(!blob){alert('导出失败');return;}const url=URL.createObjectURL(blob);const a=document.createElement('a');a.download=($('fileName').textContent.replace(/\.[^.]+$/,'')||'output')+'_'+currentAngle+'deg.'+selFormat;a.href=url;document.body.appendChild(a);a.click();document.body.removeChild(a);setTimeout(()=>URL.revokeObjectURL(url),1000);},selMime,q);
+}
+
+// ===================== RESET =====================
+tbReset.addEventListener('click',()=>{
+  originalImage=null;_origDataCache=null;undoStack=[];currentAngle=0;currentZoom=100;
+  clearSelection();stopSelAnim();
+  uploadZone.style.display='';canvasContainer.classList.remove('visible');
+  pFileInfo.style.display='none';pTool.style.display='none';pBrush.style.display='none';pSelInfo.style.display='none';pRotation.style.display='none';pZoom.style.display='none';pTips.style.display='';pAi.style.display='none';
+  [tbRectSel,tbLasso,tbPoly,tbDesel,tbEraser,tbRestore,tbExport,tbReset].forEach(b=>b.disabled=true);
+  tbAiRemove.disabled=true;tbUndo.disabled=true;fileInput.value='';updateUndoBadge();
+});
+
+// ===================== ROTATION =====================
+let isDragging=false;
+function getAngleFromEvent(e){
+  const r=rotationDial.getBoundingClientRect();const cx=r.left+r.width/2,cy=r.top+r.height/2;
+  const clx=e.clientX??(e.touches&&e.touches[0]?.clientX),cly=e.clientY??(e.touches&&e.touches[0]?.clientY);
+  if(clx==null||cly==null)return currentAngle;
+  let a=Math.atan2(cly-cy,clx-cx)*180/Math.PI+90;if(a<0)a+=360;return Math.round(a);
+}
+rotationDial.addEventListener('mousedown',e=>{isDragging=true;setAngle(getAngleFromEvent(e));});
+document.addEventListener('mousemove',e=>{if(isDragging)setAngle(getAngleFromEvent(e));});
+document.addEventListener('mouseup',()=>isDragging=false);
+
+function setAngle(a){
+  currentAngle=Math.max(0,Math.min(360,a));updateDial(currentAngle);angleInput.value=currentAngle;
+  mainCanvas.style.transform='rotate('+currentAngle+'deg)';
+  overlayCanvas.style.transform='rotate('+currentAngle+'deg)';
+}
+function updateDial(a){
+  const c=2*Math.PI*55;
+  $('dialProg').setAttribute('stroke-dashoffset',c-(a/360)*c);
+  const r=(a-90)*Math.PI/180;
+  $('dialHand').setAttribute('cx',70+55*Math.cos(r));$('dialHand').setAttribute('cy',70+55*Math.sin(r));
+  $('dialText').textContent=a;
+}
+angleInput.addEventListener('input',()=>{let v=parseInt(angleInput.value)||0;setAngle(Math.max(0,Math.min(360,v)));});
+resetAngleBtn.addEventListener('click',()=>setAngle(0));
+rotPresets.addEventListener('click',e=>{const b=e.target.closest('button[data-angle]');if(b)setAngle(parseInt(b.dataset.angle));});
+
+// ===================== ZOOM =====================
+zoomRange.addEventListener('input',()=>{currentZoom=parseInt(zoomRange.value);$('zoomLabel').textContent=currentZoom+'%';applyZoom();});
+
+// ===================== AI REMOVE BACKGROUND =====================
+let isAiProcessing=false;
+
+async function aiRemoveBackground(){
+  if(!originalImage||isAiProcessing)return;
+  isAiProcessing=true;
+  tbAiRemove.classList.add('loading');
+  btnAiRemove.disabled=true;
+  aiStatus.className='ai-status show';
+  aiStatus.innerHTML='<span class="spinner"></span>AI 正在识别产品主体并去除背景，请稍等...';
+
+  try{
+    // Save current state for undo
+    saveUndoState();
+
+    // Export current canvas as PNG blob
+    const blob=await new Promise(resolve=>mainCanvas.toBlob(resolve,'image/png'));
+    if(!blob)throw new Error('图片导出失败');
+
+    // Convert to base64
+    const base64=await new Promise(resolve=>{
+      const reader=new FileReader();
+      reader.onload=()=>resolve(reader.result.split(',')[1]);
+      reader.readAsDataURL(blob);
+    });
+
+    // Call our backend API
+    const res=await fetch('/api/remove-bg',{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({image_b64:base64})
+    });
+
+    if(!res.ok){
+      const err=await res.json().catch(()=>({error:'请求失败，HTTP '+res.status}));
+      throw new Error(err.error||err.detail||'AI 服务返回错误');
+    }
+
+    // Get the processed PNG blob
+    const resultBlob=await res.blob();
+    const resultUrl=URL.createObjectURL(resultBlob);
+    const resultImg=new Image();
+
+    await new Promise((resolve,reject)=>{
+      resultImg.onload=resolve;
+      resultImg.onerror=()=>reject(new Error('结果图片加载失败'));
+      resultImg.src=resultUrl;
+    });
+
+    // Replace canvas with AI result
+    mainCanvas.width=resultImg.naturalWidth;
+    mainCanvas.height=resultImg.naturalHeight;
+    overlayCanvas.width=resultImg.naturalWidth;
+    overlayCanvas.height=resultImg.naturalHeight;
+    ctx.clearRect(0,0,mainCanvas.width,mainCanvas.height);
+    ctx.drawImage(resultImg,0,0);
+    originalImage=resultImg;
+    _origDataCache=null;
+    URL.revokeObjectURL(resultUrl);
+
+    clearSelection();
+    fitCanvas();
+    aiStatus.className='ai-status show success';
+    aiStatus.innerHTML='✓ AI 抠图完成！如有残留边缘，可用擦除/恢复笔刷微调。';
+    console.log('[AI抠图] 成功');
+
+  }catch(err){
+    console.error('[AI抠图] 失败:',err);
+    aiStatus.className='ai-status show error';
+    aiStatus.innerHTML='✗ '+err.message+'。请重试，或先用手动工具处理。';
+  }finally{
+    isAiProcessing=false;
+    tbAiRemove.classList.remove('loading');
+    btnAiRemove.disabled=false;
+  }
+}
+
+tbAiRemove.addEventListener('click',aiRemoveBackground);
+btnAiRemove.addEventListener('click',aiRemoveBackground);
+
+// ===================== KEYBOARD SHORTCUTS =====================
+document.addEventListener('keydown',e=>{
+  // Don't trigger when typing in input fields
+  if(e.target.tagName==='INPUT')return;
+
+  if(e.ctrlKey&&e.key==='z'){e.preventDefault();tbUndo.click();return;}
+  if(e.ctrlKey&&e.key==='d'){e.preventDefault();clearSelection();stopSelAnim();return;}
+  if(e.ctrlKey&&e.shiftKey&&(e.key==='I'||e.key==='i')){e.preventDefault();$('btnSelInv').click();return;}
+  if(e.ctrlKey&&e.key==='a'){e.preventDefault();$('btnSelAll').click();return;}
+
+  if(e.key==='e'||e.key==='E')setTool('eraser');
+  if(e.key==='r'||e.key==='R')setTool('restore');
+  if(e.key==='m'||e.key==='M')setTool('rect-sel');
+  if(e.key==='l'||e.key==='L')setTool('lasso');
+  if(e.key==='p'||e.key==='P')setTool('poly');
+  // Escape: cancel in-progress polygon
+  if(e.key==='Escape'&&currentTool==='poly'&&polyPoints.length>0){
+    polyPoints=[];polyPreview=null;polyClosed=false;renderPolyPreview();
+  }
+  // Enter: close polygon
+  if(e.key==='Enter'&&currentTool==='poly'&&polyPoints.length>=3){
+    closePolySel(selMode);
+  }
+  if(e.key==='['){brushRadius=Math.max(2,brushRadius-5);brushSizeSlider.value=brushRadius*2;brushSizeVal.textContent=(brushRadius*2)+'px';}
+  if(e.key===']'){brushRadius=Math.min(100,brushRadius+5);brushSizeSlider.value=brushRadius*2;brushSizeVal.textContent=(brushRadius*2)+'px';}
+  // Delete key: erase inside selection
+  if(e.key==='Delete'&&hasSelection()){
+    saveUndoState();
+    const w=mainCanvas.width,h=mainCanvas.height;
+    const cur=ctx.getImageData(0,0,w,h);
+    for(let i=0;i<selMask.length;i++){
+      if(selMask[i]){cur.data[i*4+3]=0;}
+    }
+    ctx.putImageData(cur,0,0);
+  }
+});
+
+console.log('[抠图] 所有事件已注册');
+</script>
+</body>
+</html>
